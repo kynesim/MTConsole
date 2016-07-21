@@ -1,0 +1,4 @@
+# Ignore editor files
+*~
+# Ignore cached Python bytecode
+__pycache__/*
