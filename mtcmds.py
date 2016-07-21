@@ -1334,5 +1334,17 @@ class MTBuffer:
                           MTAPISubsystem.to_number(subsystem_name))
         self.buffer[3] = cmd_code
 
+    def append(self, byte):
+        if self.buffer[1] == 0xff:
+            raise ParseError("MT Buffer body overflow")
+        self.buffer[1] += 1
+        self.buffer.append(byte)
+
+    def extend(self, iterable):
+        if self.buffer[1] + len(iterable) < self.buffer[1]:
+            raise ParseError("MT Buffer body overflow")
+        self.buffer[1] += len(iterable)
+        self.buffer.extend(iterable)
+
     def send(self, socket):
         socket.write(self.buffer)

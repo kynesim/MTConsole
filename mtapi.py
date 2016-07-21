@@ -72,6 +72,17 @@ class MTAPICmd:
         the offset into the data at which parsing stops."""
         return parse_generic(self.fields, data)
 
+    def parse_tokens(self, tokens, buf):
+        """Parse the textual token stream into binary, and insert it
+        into the byte buffer passed in.  Returns True if the token
+        stream was parsed successfully, False on a parse error."""
+        if len(self.fields) != len(tokens) - 1:
+            return False
+        for field, token in zip(self.fields, tokens[1:]):
+            if not field.parse_token(token, buf):
+                return False
+        return True
+
 
 def print_field(indent, field, value):
     "Display a (name, value) pair with appropriate indentation."
@@ -116,6 +127,18 @@ class ParseField:
             print_field(indent, self.name,
                         " ".join("0x%02x" % b for b in byte_range))
         return offset + self.length
+
+    def parse_token(self, token, buf):
+        """Parses the tokenised input stream of text into binary, and
+        stores it in the MTBuffer provided.  Returns True on success,
+        False on failure."""
+        try:
+            value = int(token, 0)
+        except ValueError:
+            return False
+        for i in range(self.length):
+            buf.append((value >> (8*i)) & 0xff)
+        return True
 
 
 class ParseClusterList:
