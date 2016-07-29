@@ -3,6 +3,24 @@
 # mtcmds.py
 #
 # The command tables for the MTAPI protocol
+#
+# Author: Rhodri James (rhodri@kynesim.co.uk)
+# Date: 20 July 2016
+#
+# Copyright 2016 Kynesim Ltd
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 
 from mtapi import *
 
@@ -1245,16 +1263,25 @@ MT_COMMANDS = { ("SREQ", "AF"):    MT_AF_SREQ_CMDS,
 
 
 class MTAPI:
+    """State machine for managing serial comms reception from a device
+    talking the MTAPI protocols."""
     def __init__(self, sock):
+        """Create an MTAPI reception state machine and initialise it
+        to expect a Start Of Frame byte."""
         self.sock = sock
         self.state = self.read_sof
 
     def read_sof(self):
+        """State in which the protocol is expecting a start of frame
+        (0xfe) byte."""
         byte = self.sock.read(1)
         if len(byte) == 1 and byte[0] == 0xfe:
             self.state = self.read_len
 
     def read_len(self):
+        """State in which the protocol is expecting the first byte of
+        an MTAPI header, the body length.  Will read the rest of the
+        header if it is available."""
         byte = self.sock.read(3)
         if len(byte) == 0:
             return
@@ -1264,6 +1291,9 @@ class MTAPI:
             self.read_cmd0(byte[1:])
 
     def read_cmd0(self, byte=None):
+        """State in which the protocol is expecting the second byte of
+        an MTAPI header, "CMD0", the type and subsystem byte.  Will
+        read the rest of the header if it is available."""
         if byte is None:
             byte = self.sock.read(2)
         if len(byte) == 0:
@@ -1275,6 +1305,9 @@ class MTAPI:
             self.read_cmd1(byte[1:])
 
     def read_cmd1(self, byte=None):
+        """State in which the protocol is expecting the final byte of
+        an MTAPI header, "CMD1", the subsystem command.  Does not
+        attempt to read the body of the MTAPI packet, if there is one."""
         if byte is None:
             byte = self.sock.read(1)
         if len(byte) == 0:
@@ -1289,6 +1322,10 @@ class MTAPI:
             self.execute()
 
     def read_data(self):
+        """State in which the protocol is reading bytes from the body
+        of an MTAPI packet.   Once all bytes are read, the packet will
+        be parsed and the state machine return to waiting for a start
+        of frame."""
         bytestream = self.sock.read(self.bytes_to_read)
         if len(bytestream) == 0:
             return
@@ -1299,6 +1336,9 @@ class MTAPI:
             self.execute()
 
     def execute(self):
+        """Parse the MTAPI packet read in, using the packet
+        descriptions held in the MT_COMMANDS global variable.  The
+        results are written to stdout."""
         print(self.type, self.subsystem, "Cmd = %02x" % self.cmd)
         key = (str(self.type), str(self.subsystem))
         if key in MT_COMMANDS:
@@ -1312,13 +1352,22 @@ class MTAPI:
         self.data = None
 
     def __call__(self):
+        "Work the state machine."
         self.state()
         # Return value is True to continue execution, False to quit
         return True
 
 
 class MTBuffer:
+    """Class for constructing an MTAPI packet to transmit on the
+    serial comms.  MTBuffers are specific to MTAPI commands, so are
+    created on the fly."""
     def __init__(self, subsystem_name, mtype_name, command_name):
+        """Create a transmission buffer for the MTAPI command defined
+        by the subsystem, type and command names passed as
+        parameters.  The command is looked up in the global variable
+        MT_COMMANDS.  An mtapi.ParseError is raised if the command is
+        not found."""
         dictionary = MT_COMMANDS[(mtype_name, subsystem_name)]
         for cmd_code, command in dictionary.items():
             if command.name == command_name:
@@ -1335,16 +1384,21 @@ class MTBuffer:
         self.buffer[3] = cmd_code
 
     def append(self, byte):
+        """Adds a single byte to the transmission buffer.  Raises an
+        mtapi.ParseError if this causes the buffer to overflow."""
         if self.buffer[1] == 0xff:
             raise ParseError("MT Buffer body overflow")
         self.buffer[1] += 1
         self.buffer.append(byte)
 
     def extend(self, iterable):
+        """Adds a number of bytes to the transmission buffer.  Raises
+        an mtapi.ParseError if this cases the buffer to overflow."""
         if self.buffer[1] + len(iterable) < self.buffer[1]:
             raise ParseError("MT Buffer body overflow")
         self.buffer[1] += len(iterable)
         self.buffer.extend(iterable)
 
     def send(self, socket):
+        "Sends the assembled transmit buffer to the serial socket."
         socket.write(self.buffer)

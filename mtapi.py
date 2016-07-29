@@ -3,31 +3,57 @@
 # mtapi.py
 #
 # Basic classes for MTAPI command construction and parsing
+#
+# Author: Rhodri James (rhodr@kynesim.co.uk)
+# Date: 21 July 2016
+#
+# Copyright 2016 Kynesim Ltd
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 
 import sys
 
 class ParseError(Exception):
+    "Generic exception class for MTConsole."
     pass
 
 
 class MTAPIType:
+    "Encodes an MTAPI packet type, numerically and textually."
     STRING = [ "POLL", "SREQ", "AREQ", "SRSP" ]
     def __init__(self, value):
+        """Create an MTAPI type instance.  Expects an integer between
+        0x20 and 0xe0 in steps of 0x20, and extracts that from the
+        lowest byte of `value`"""
         self.type = (value >> 5) & 0x07
 
     def __str__(self):
+        "String representation of the type as the usual TI name."
         if self.type < len(MTAPIType.STRING):
             return MTAPIType.STRING[self.type]
         return "RSVD(%02x)" % (self.type << 5)
 
     @classmethod
     def to_number(cls, name):
+        """Convert a standard MTAPI type name to a number, correctly
+        shifted to OR into an MTAPI packet header ("Cmd1" byte)."""
         number = cls.STRING.index(name)
         return number << 5
 
 
 class MTAPISubsystem:
+    "Encodes an MTAPI packet subsystem, numerically and textually."
     STRING = [ "Reserved(0x00)",
                "SYS",
                "MAC",
@@ -39,15 +65,21 @@ class MTAPISubsystem:
                "DEBUG",
                "APP" ]
     def __init__(self, value):
+        """Create a subsystem instance.  Expects an integer from 0x00
+        to 0x1f, and extracts that from the lowest bytes of `value`.
+        """
         self.subsystem = value & 0x1f
 
     def __str__(self):
+        "String representation of the subsystem as the usual TI name."
         if self.subsystem < len(MTAPISubsystem.STRING):
             return MTAPISubsystem.STRING[self.subsystem]
         return "Reserved(%02x)" % self.subsystem
 
     @classmethod
     def to_number(cls, name):
+        """Convert a standard MTAPI subssytem name to a number, ready
+        to OR into an MTAPI packet header ("Cmd1" byte)."""
         return cls.STRING.index(name)
 
 
@@ -108,10 +140,13 @@ class ParseField:
                                            self.parser)
 
     def field_info(self):
+        """Get the list of fields, or rather (field name, byte length,
+        parser function) triplets, to provide help information for
+        textual command handling."""
         return [(self.name, self.length, self.parser)]
 
     def parse(self, data, offset, indent=0):
-        """Extracts data for the field from `offset` bytes into the
+        """Extract data for the field from `offset` bytes into the
         `data` bytestream, and prints the parsed results.  The output
         has 2 * `indent` + 2 leading spaces.
 
@@ -182,6 +217,8 @@ class ParseClusterList:
                     ", ".join("%04x" % cluster for cluster in clusters))
         return offset
 
+    # TODO: field_info() and parse_tokens()
+
 
 class ParseVariable:
     """Parse description class for a variable length byte stream
@@ -226,6 +263,8 @@ class ParseVariable:
                                            offset+count+self.len_bytes]))
         return offset + count + self.len_bytes
 
+    # TODO: field_info() and parse_tokens()
+
 
 class ParseExtData:
     """Parse description class for a variable length byte stream
@@ -267,6 +306,8 @@ class ParseExtData:
                              for d in data[offset+2: offset+count+2]))
         return offset + count + 2
 
+    # TODO: field_info() and parse_tokens()
+
 
 class ParseRemaining:
     """Parse description class for a field consisting of all the
@@ -283,6 +324,8 @@ class ParseRemaining:
         print_field(indent, self.name,
                     " ".join("%02x" % d for d in data[offset:]))
         return len(data)
+
+    # TODO: field_info() and parse_tokens()
 
 
 class ParseAddress:
@@ -338,6 +381,8 @@ class ParseAddress:
                         " ".join("0x%02x" % b
                                  for b in data[offset+1:offset+9]))
         return offset + 9
+
+    # TODO: field_info() and parse_tokens()
 
 
 class ParseBindAddress:
@@ -412,6 +457,8 @@ class ParseBindAddress:
         raise ParseError("Invalid field %s (%02x)" % (self.name,
                                                       data[offset]))
 
+    # TODO: field_info() and parse_tokens()
+
 
 class ParseInterPan:
     """Parse description for an Inter-Pan command plus parameters."""
@@ -451,6 +498,8 @@ class ParseInterPan:
         print_field(indent, "Endpoint", "0x%02x" % data[offset+3])
         return offset + 4
 
+    # TODO: field_info() and parse_tokens()
+
 
 class BitField:
     """Helper class to describe a bitfield within an arbitrary length
@@ -481,6 +530,8 @@ class BitField:
         print_field(indent, self.name,
                     "%02x" % ((byte & self.mask) >> self.shift))
 
+    # TODO: field_info() and parse_tokens() ?
+
 
 class ParseBitFields:
     """Parse description class for single bytes that contain multiple
@@ -509,6 +560,8 @@ class ParseBitFields:
         for f in self.fields:
             f.parse(byte, indent+1)
         return offset + 1
+
+    # TODO: field_info() and parse_tokens()
 
 
 class ParseRepeated:
@@ -540,6 +593,8 @@ class ParseRepeated:
             offset += field_len
             count -= 1
         return offset
+
+    # TODO: field_info() and parse_tokens()
 
 class ParseKey:
     """Parse description class for a security key.  The class combines
@@ -601,6 +656,8 @@ class ParseKey:
         print_field(indent, self.index_name, "%02x" % data[offset+10])
         return offset + 11
 
+    # TODO: field_info() and parse_tokens()
+
 
 class ParseTime:
     """Parse description class for the common fields used for time.
@@ -642,6 +699,8 @@ class ParseTime:
                                       as_decimal=True))
         return offset + 11
 
+    # TODO: field_info() and parse_tokens()
+
 
 def parse_generic(fields, data, indent=0):
     "Recurse through the sequence `fields`, parsing the data into them."
@@ -652,6 +711,8 @@ def parse_generic(fields, data, indent=0):
 
 
 # Helper routines for parsing field types into strings
+# TODO: all these field_parse_* routines will need to become classes
+# to support text parsing of command lines.
 
 def field_parse_hword(data, as_decimal=False):
     """Parse two bytes as a little-endian integer.  Presents as four
@@ -710,12 +771,25 @@ def field_parse_dict(data, dictionary, default):
 
 
 class FieldParseDict:
+    """Class-based dictionary parser, interpreting an integer as one
+    of a number of fixed strings (or a formatted default).  Required
+    for parsing text -- the field_parse_dict function only parses a
+    bytestream."""
     def __init__(self, dictionary, default, width=1):
+        """Creates a parser for `dictionary`, whose keys are expected
+        to be integers and whose values are the corresponding text.
+        `default` supplies a string which will be used if the integer
+        is not a key in the dictionary; it may contain a '%'
+        formatting term which will passed the integer.  `width` is the
+        number of bytes that the field takes up in a bytestream."""
         self.dictionary = dictionary
         self.default = default
         self.width = width
 
     def __call__(self, data):
+        """Interpret self.width bytes of the data into a little-endian
+        integer, which is then looked up in self.dictionary.  Returns
+        the resulting string."""
         # Assemble the index value
         width = self.width
         value = 0
@@ -727,6 +801,8 @@ class FieldParseDict:
         return self.default % value
 
     def helper(self, field_name):
+        """Called by the UI Handler's help routine to output
+        information on the expected dictionary keys."""
         print("Value '%s' codes are:" % field_name)
         fmt = "\t0x%%0%dx: %%s" % (self.width * 2)
         for key in sorted(self.dictionary.keys()):

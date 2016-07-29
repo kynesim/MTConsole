@@ -2,7 +2,10 @@ MTConsole
 =========
 
 A serial terminal for talking TI's Monitor Test API to CC2538 and
-similar chips.
+similar chips.  MTConsole is distributed under version 2.0 of the
+Apache License: see http://www.apache.org/licenses/LICENSE-2.0 for
+details, but in summary you can use and redistribute it as long as due
+credit is given.
 
 MTConsole is a Python3 program; you will need to download the Python3
 interpreter from www.python.org if you haven't already.
@@ -26,4 +29,4 @@ Note that the command-line parser is currrently very primative and
 incomplete.  Only the most basic field types support it, and only for
 numeric input.  This, obviously, is the next target.
 
--- Rhodri James, 21/7/16
+-- Rhodri James, 28/7/16

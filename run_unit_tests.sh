@@ -1,5 +1,7 @@
 #! /bin/bash
 
+# Simple shell script to run all the unit tests
+
 # Exit on errors
 set -e
 
