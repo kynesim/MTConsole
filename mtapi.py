@@ -768,9 +768,7 @@ def field_parse_scan_channels(data):
 
 class FieldParseDict:
     """Class-based dictionary parser, interpreting an integer as one
-    of a number of fixed strings (or a formatted default).  Required
-    for parsing text -- the field_parse_dict function only parses a
-    bytestream."""
+    of a number of fixed strings (or a formatted default)."""
     def __init__(self, dictionary, default, width=1):
         """Creates a parser for `dictionary`, whose keys are expected
         to be integers and whose values are the corresponding text.
