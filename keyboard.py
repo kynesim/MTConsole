@@ -100,7 +100,7 @@ class UIHandler:
         if tokens[0] == '?':
             cmd = "help"
         else:
-            cmd = tokens[0].lower()
+            cmd = tokens[0].casefold()
 
         if cmd in UIHandler.COMMAND_TABLE:
             entry = UIHandler.COMMAND_TABLE[cmd]
@@ -144,7 +144,7 @@ class UIHandler:
         wrapper = textwrap.TextWrapper(subsequent_indent='\t')
         if tokens:
             # Help required on a specific command
-            name = tokens[0].lower()
+            name = tokens[0].casefold()
             if name not in UIHandler.COMMAND_TABLE:
                 print("Command", tokens[0], "not found")
                 return True
