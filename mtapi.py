@@ -109,9 +109,12 @@ class MTAPICmd:
         into the byte buffer passed in.  Returns True if the token
         stream was parsed successfully, False on a parse error."""
         if len(self.fields) != len(tokens) - 1:
+            print("Error: not enough tokens in command\n")
             return False
         for field, token in zip(self.fields, tokens[1:]):
             if not field.parse_token(token, buf):
+                print("Error: '%s' not recognised in field %s\n" %
+                      (token, field.name))
                 return False
         return True
 
@@ -170,7 +173,12 @@ class ParseField:
         try:
             value = int(token, 0)
         except ValueError:
-            return False
+            if self.parser is None:
+                return False
+            try:
+                value = self.parser.parse_token(token)
+            except ParseError:
+                return False
         for i in range(self.length):
             buf.append((value >> (8*i)) & 0xff)
         return True
@@ -757,18 +765,6 @@ def field_parse_scan_channels(data):
             channels.append(i)
     return ",".join(str(channel) for channel in channels)
 
-def field_parse_dict(data, dictionary, default):
-    """Interpret the `data` bytes passed in as a little endian integer,
-    look the value up in `dictionary`, return the value if found or
-    `default` if not.  `default` may contain a '%' formatting term, and
-    will have the interpreted data value as a parameter"""
-    value = 0
-    for index, d in enumerate(data):
-        value |= d << (index * 8)
-    if value in dictionary:
-        return dictionary[value]
-    return default % value
-
 
 class FieldParseDict:
     """Class-based dictionary parser, interpreting an integer as one
@@ -807,6 +803,31 @@ class FieldParseDict:
         fmt = "\t0x%%0%dx: %%s" % (self.width * 2)
         for key in sorted(self.dictionary.keys()):
             print(fmt % (key, self.dictionary[key]))
+
+    def parse_token(self, token):
+        """Interpret a string token input as a value from the
+        dictionary, effectively doing a reverse lookup.  Returns the
+        value (key) looked up; raises a ParseError on failure."""
+        # Create the reverse lookup table
+        lookup = {}
+        for key, value in self.dictionary.items():
+            v = value.casefold()
+            if v in lookup:
+                lookup[v] = None
+            else:
+                lookup[v] = key
+        # Deal with the easy case
+        token = token.casefold()
+        if token in lookup:
+            return lookup[token]
+        # See if token is a unique substring of any key in lookup
+        keys = []
+        for v in lookup.keys():
+            if v.startswith(token):
+                keys.append(v)
+        if len(keys) == 1:
+            return lookup[keys[0]]
+        raise ParseError("Value '%s' not recognised" % token)
 
 
 def field_parse_bitfield(data, bitarray, off_bitarray=None):
@@ -852,19 +873,13 @@ STATUS = { 0x00: "Success",
            0xe8: "ZMacInvalidParameter",
            0xfc: "Scan in progress"
 }
-
-def field_parse_status(data):
-    "Interpret the data as an MTAPI status (ZSTATUS) byte."
-    return field_parse_dict(data, STATUS, "Failure(0x%02x)")
+field_parse_status = FieldParseDict(STATUS, "Failure(0x%02x)")
 
 LATENCY = { 0x00: "No latency",
             0x01: "Fast beacons",
             0x02: "Slow beacons"
 }
-
-def field_parse_latency(data):
-    "Interpret the data as a beacon latency byte."
-    return field_parse_dict(data, LATENCY, "Invalid(0x%02x)")
+field_parse_latency = FieldParseDict(LATENCY, "Invalid(0x%02x)")
 
 OPTIONS = [ "(Reserved)",
             "Wildcard Profile Id",
@@ -885,10 +900,7 @@ ADDRESS_MODE = { 0x00: "Address not present",
                  0x03: "64-bit address",
                  0xff: "Broadcast"
 }
-
-def field_parse_address_mode(data):
-    "Interpret the data as an address mode byte"
-    return field_parse_dict(data, ADDRESS_MODE, "Invalid(0x%02x)")
+field_parse_address_mode = FieldParseDict(ADDRESS_MODE, "Invalid(0x%02x)")
 
 TX_OPTION = [ "Ack", "GTS", "Indirect", "(Unused)",
               "No Retransmission", "No Confirms",
@@ -926,19 +938,14 @@ ASSOC_STATUS = { 0x00: "Success",
                  0x01: "PAN at capacity",
                  0x02: "PAN access denied"
 }
-
-def field_parse_assoc_status(data):
-    "Interpret the data as an association status byte."
-    return field_parse_dict(data, ASSOC_STATUS, "Unknown(0x%02x)")
+field_parse_assoc_status = FieldParseDict(ASSOC_STATUS, "Unknown(0x%02x)")
 
 DISASSOC_REASON = { 0x00: "Reserved",
                     0x01: "Coord wishes device to leave",
                     0x02: "Device wishes to leave"
 }
-
-def field_parse_disassoc_reason(data):
-    "Interpret the data as a disassociation reason code."
-    return field_parse_dict(data, DISASSOC_REASON, "Unknown(0x%02x)")
+field_parse_disassoc_reason = FieldParseDict(DISASSOC_REASON,
+                                             "Unknown(0x%02x)")
 
 MAC_ATTRIBUTE = { 0x40: "ZMAC_ACK_WAIT_DURATION",
                   0x41: "ZMAC_ASSOCIATION_PERMIT",
@@ -975,20 +982,14 @@ MAC_ATTRIBUTE = { 0x40: "ZMAC_ACK_WAIT_DURATION",
                   0xe2: "ZMAC_EXTENDED_ADDRESS",
                   0xe3: "ZMAC_ALT_BE"
 }
-
-def field_parse_mac_attr(data):
-    "Interpret the data as a MAC attribute number."
-    return field_parse_dict(data, MAC_ATTRIBUTE, "Unknown(0x%02x)")
+field_parse_mac_attr = FieldParseDict(MAC_ATTRIBUTE, "Unknown(0x%02x)")
 
 SCAN_TYPE = { 0x00: "Energy Detect",
               0x01: "Active",
               0x02: "Passive",
               0x03: "Orphan"
 }
-
-def field_parse_scan_type(data):
-    "Interpret the data as a scan type."
-    return field_parse_dict(data, SCAN_TYPE, "Unknown(0x%02x)")
+field_parse_scan_type = FieldParseDict(SCAN_TYPE, "Unknown(0x%02x)")
 
 RESET_TYPE = { 0 : "Hardware", 1: "Software" }
 field_parse_reset_type = FieldParseDict(RESET_TYPE, "Unknown(0x%02x)")
@@ -997,10 +998,7 @@ RESET_REASON = { 0x00: "Power-up",
                  0x01: "External",
                  0x02: "Watchdog"
 }
-
-def field_parse_reset_reason(data):
-    "Interpret the data as a reset reason code."
-    return field_parse_dict(data, RESET_REASON, "Unknown(0x%02x)")
+field_parse_reset_reason = FieldParseDict(RESET_REASON, "Unknown(0x%02x)")
 
 SYS_CAPABILITIES = [
     "MT_CAP_SYS",
@@ -1037,10 +1035,7 @@ ADC_CHANNEL = {
     0x0e: "Temperature Sensor",
     0x0f: "Voltage Reading"
 }
-
-def field_parse_adc_channel(data):
-    "Interpret the data as an ADC channel identifier."
-    return field_parse_dict(data, ADC_CHANNEL, "Invalid(0x%02x)")
+field_parse_adc_channel = FieldParseDict(ADC_CHANNEL, "Invalid(0x%02x)")
 
 ADC_RESOLUTION = {
     0x00: "8-bit",
@@ -1048,10 +1043,8 @@ ADC_RESOLUTION = {
     0x02: "12-bit",
     0x03: "14-bit"
 }
-
-def field_parse_adc_resolution(data):
-    "Interpret the data as an ADC channel resolution value."
-    return field_parse_dict(data, ADC_RESOLUTION, "Invalid(0x%02x)")
+field_parse_adc_resolution = FieldParseDict(ADC_RESOLUTION,
+                                            "Invalid(0x%02x)")
 
 GPIO_OP = {
     0x00: "Set direction",
@@ -1061,10 +1054,7 @@ GPIO_OP = {
     0x04: "Toggle",
     0x05: "Read"
 }
-
-def field_parse_gpio_operation(data):
-    "Interpret the data as a GPIO operation command"
-    return field_parse_dict(data, GPIO_OP, "Invalid(0x%02x)")
+field_parse_gpio_operation = FieldParseDict(GPIO_OP, "Invalid(0x%02x)")
 
 DEVICE_TYPE = [
     "Coordinator",
@@ -1109,10 +1099,7 @@ DEVICE_STATE = {
     0x09: "Started as Coordinator",
     0x0a: "Lost Parent Info"
 }
-
-def field_parse_device_state(data):
-    "Interpret the data as a device state byte."
-    return field_parse_dict(data, DEVICE_STATE, "Unknown(0x%02x)")
+field_parse_device_state = FieldParseDict(DEVICE_STATE, "Unknown(0x%02x)")
 
 SUBSYSTEM_ID = {
     0x0100: "MT_SYS",
@@ -1126,16 +1113,12 @@ SUBSYSTEM_ID = {
     0x0900: "MT_APP",
     0xffff: "ALL_SUBSYSTEMS"
 }
-
-def field_parse_subsystem_id(data):
-    "Interpret the data as an MTAPI subsystem ID"
-    return field_parse_dict(data, SUBSYSTEM_ID, "Reserved(0x%04x)")
+field_parse_subsystem_id = FieldParseDict(SUBSYSTEM_ID,
+                                          "Reserved(0x%04x)",
+                                          width=2)
 
 DISABLE_ENABLE = { 0: "Disable", 1: "Enable" }
-
-def field_parse_enable(data):
-    "Interpret the data as a boolean Disable/Enable field"
-    return field_parse_dict(data, DISABLE_ENABLE, "Unexpected(0x%02x)")
+field_parse_enable = FieldParseDict(DISABLE_ENABLE, "Unexpected(0x%02x)")
 
 KEYS = ["Key 1", "Key 2", "Key 3", "Key 4",
         "Key 5", "Key 6", "Key 7", "Key 8"
@@ -1146,16 +1129,10 @@ def field_parse_keys(data):
     return field_parse_bitfield(data, KEYS)
 
 SHIFT = { 0: "No shift", 1: "Shift" }
-
-def field_parse_shift(data):
-    "Interpret the data as a boolean Shift Key field"
-    return field_parse_dict(data, SHIFT, "Unexpected(0x%02x)")
+field_parse_shift = FieldParseDict(SHIFT, "Unexpected(0x%02x)")
 
 ON_OFF = { 0: "OFF", 1: "ON" }
-
-def field_parse_onoff(data):
-    "Interpret the data as a boolean On/Off field"
-    return field_parse_dict(data, ON_OFF, "Unexpected(0x%02x)")
+field_parse_onoff = FieldParseDict(ON_OFF, "Unexpected(0x%02x)")
 
 RELATION = {
     0: "Parent",
@@ -1166,10 +1143,7 @@ RELATION = {
     5: "Neighbour",
     6: "Other"
 }
-
-def field_parse_relation(data):
-    "Interpret the data as a relationship."
-    return field_parse_dict(data, RELATION, "Invalid(0x%02x)")
+field_parse_relation = FieldParseDict(RELATION, "Invalid(0x%02x)")
 
 LEAVE_ACTION = [
     "Rejoin",
@@ -1191,10 +1165,8 @@ STARTUP_STATUS = {
     1: "New network state",
     2: "Leave and not Started"
 }
-
-def field_parse_startup_status(data):
-    "Interpret the data as a startup status byte"
-    return field_parse_dict(data, STARTUP_STATUS, "Unexpected(0x%02x)")
+field_parse_startup_status = FieldParseDict(STARTUP_STATUS,
+                                            "Unexpected(0x%02x)")
 
 SERVER_MASK = [
     "Primary Trust Centre",
@@ -1217,16 +1189,11 @@ ROUTING_STATUS = {
     0x02: "Discovery Failed",
     0x03: "Inactive"
 }
-
-def field_parse_routing_status(data):
-    "Interpret the data as a routing status byte."
-    return field_parse_dict(data, ROUTING_STATUS, "Invalid(0x%02x)")
+field_parse_routing_status = FieldParseDict(ROUTING_STATUS,
+                                            "Invalid(0x%02x)")
 
 JOIN_DURATION = {
     0x00: "Disabled",
     0xff: "Enabled"
 }
-
-def field_parse_join_duration(data):
-    "Interpret the data as a join duration byte."
-    return field_parse_dict(data, JOIN_DURATION, "0x%02x")
+field_parse_join_duration = FieldParseDict(JOIN_DURATION, "0x%02x")

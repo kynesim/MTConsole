@@ -1079,9 +1079,16 @@ class TestParseDict(unittest.TestCase):
                          "  Test : " + expected_result + "\n")
 
     def test_dictionary(self):
+        dictionary = { 0 : "Zero", 1 : "One", 2 : "Two" }
+        default = "Default(%d)"
+        parser = mtapi.FieldParseDict(dictionary, default)
+        self._test_dictionary(b'\x00', parser, "Zero")
+        self._test_dictionary(b'\x02', parser, "Two")
+        self._test_dictionary(b'\x04', parser, "Default(4)")
+
         dictionary = { 0x0001 : "One", 0x0100 : "Two" }
         default = "Bad(%04x)"
-        parser = lambda d : mtapi.field_parse_dict(d, dictionary, default)
+        parser = mtapi.FieldParseDict(dictionary, default, width=2)
         self._test_dictionary(b'\x01\x00', parser, "One")
         self._test_dictionary(b'\x00\x01', parser, "Two")
         self._test_dictionary(b'\x10\x00', parser, "Bad(0010)")
