@@ -64,6 +64,28 @@ class TestParseField(FieldTest, unittest.TestCase):
         self.field_test_ok(field, "0x01020304", b'\x04\x03\x02\x01')
 
 
+class TestParseInteger(FieldTest, unittest.TestCase):
+    def test_hword(self):
+        field = mtapi.ParseField("TestH", 2, mtapi.field_parse_hword)
+        self.field_test_ok(field, "2", b'\x02\x00')
+        self.field_test_ok(field, "0x2fe", b'\xfe\x02')
+        self.field_test_ok(field, "0x123456", b'\x56\x34')
+
+        buf = bytearray()
+        self.assertFalse(field.parse_token("Wombats are go", buf))
+
+    def test_word(self):
+        field = mtapi.ParseField("TestW", 4, mtapi.field_parse_word)
+        self.field_test_ok(field, "3", b'\x03\x00\x00\x00')
+        self.field_test_ok(field, "0x4fd", b'\xfd\x04\x00\x00')
+        self.field_test_ok(field, "0x123456", b'\x56\x34\x12\x00')
+        self.field_test_ok(field, "0x89abcdef", b'\xef\xcd\xab\x89')
+        self.field_test_ok(field, "0x123456789", b'\x89\x67\x45\x23')
+
+        buf = bytearray()
+        self.assertFalse(field.parse_token("StillNaN", buf))
+
+
 class DictTest(FieldTest, unittest.TestCase):
     def dictionary_test(self, parser, ok_params, fail_params, width=1):
         field = mtapi.ParseField("Test", width, parser=parser)

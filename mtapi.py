@@ -703,8 +703,7 @@ class ParseTime:
         print_field(indent, "Month", data[offset+7])
         print_field(indent, "Day", data[offset+8])
         print_field(indent, "Year",
-                    field_parse_hword(data[offset+9:offset+11],
-                                      as_decimal=True))
+                    extract_little_endian(data[offset+9:offset+11]))
         return offset + 11
 
     # TODO: field_info() and parse_tokens()
@@ -719,26 +718,49 @@ def parse_generic(fields, data, indent=0):
 
 
 # Helper routines for parsing field types into strings
+
+
+def extract_little_endian(data):
+    "Converts the bytes of `data` into an integer, little endian."
+    value = 0
+    for i, d in enumerate(data):
+        value |= d << (i*8)
+    return value
+
 # TODO: all these field_parse_* routines will need to become classes
 # to support text parsing of command lines.
 
-def field_parse_hword(data, as_decimal=False):
-    """Parse two bytes as a little-endian integer.  Presents as four
-    hexadecimal digits with no leading '0x' unless `as_decimal` is True.
-    `data` is assumed to contain at least two bytes."""
-    value = data[0] | (data[1] << 8)
-    if as_decimal:
-        return str(value)
-    return "%04x" % value
+class FieldParseInteger:
+    "Parse bytes as a little-endian integer."
+    def __init__(self, width):
+        """Creates a parser for a sequence of `width` bytes,
+        interpreted as a little-endian integer."""
+        self.width = width
+        self.format = "%%0%dx" % (2 * width)
 
-def field_parse_word(data, as_decimal=False):
-    """Parse four bytes as a little-endian integer.  Presents as eight
-    hexadecimal digits with no leading '0x' unless `as_decimal` is True.
-    `data` is assumed to contain at least four bytes."""
-    value = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24)
-    if as_decimal:
-        return str(value)
-    return "%08x" % value
+    def __call__(self, data, as_decimal=False):
+        """Interpret the first `width` bytes of the data into a
+        little-endian integer, converted to a string.  The string
+        output format is controlled by the `as_decimal` parameter.
+        """
+        value = extract_little_endian(data[:self.width])
+        if as_decimal:
+            return str(value)
+        return self.format % value
+
+    def helper(self, field_name):
+        """Called by UI Handler's help routing to output information
+        on the expected text values."""
+        print("Value '%s' codes are numbers from 0 to %d" %
+              ((1 << (8*self.width)) - 1))
+
+    def parse_token(self, token):
+        """The field parser will always have already tried parsing
+        this as a number, so we can never do more here."""
+        raise ParseError("Value '%s' not recognised" % token)
+
+field_parse_hword = FieldParseInteger(2)
+field_parse_word = FieldParseInteger(4)
 
 def field_parse_colon_sep(data):
     """Reverse the order of the bytes presented and return them as
